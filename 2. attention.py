@@ -19,16 +19,12 @@ class SimpleAttention(nn.Module):
         # Calculate attention scores
         # (batch_size, seq_len, seq_len)
         scores = torch.matmul(Q, K.transpose(-2, -1))
-        
         # Scale the scores
         scores = scores / (Q.size(-1) ** 0.5)
-        
         # Apply softmax to get attention weights
         attention_weights = F.softmax(scores, dim=-1)
-        
         # Apply attention weights to values
         output = torch.matmul(attention_weights, V)
-        
         return output, attention_weights
 
 # Let's try it out!

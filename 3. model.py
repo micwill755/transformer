@@ -3,44 +3,69 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import defaultdict
 
+'''
+The SimpleTokenizer takes a sentence, splits it into individual words, 
+and converts each unique word into a numeric ID (starting with special 
+tokens like PAD and UNK), creating a dictionary that maps words to IDs and vice versa, 
+allowing us to transform text into numbers that our neural network can process.
+'''
 class SimpleTokenizer:
     def __init__(self):
-        self.word_to_id = defaultdict(lambda: len(self.word_to_id))
+        # We use two dictionaries for bidirectional mapping
+        self.word_to_id = {}
         self.id_to_word = {}
         
         # Add special tokens
-        self.PAD_TOKEN = self.word_to_id["<PAD>"]
-        self.UNK_TOKEN = self.word_to_id["<UNK>"]
+        self.word_to_id["<PAD>"] = 0
+        self.word_to_id["<UNK>"] = 1
+        self.id_to_word[0] = "<PAD>"
+        self.id_to_word[1] = "<UNK>"
         
-        # Update id_to_word mapping for special tokens
-        self.id_to_word[self.PAD_TOKEN] = "<PAD>"
-        self.id_to_word[self.UNK_TOKEN] = "<UNK>"
+        self.PAD_TOKEN = 0
+        self.UNK_TOKEN = 1
 
     def tokenize(self, text):
-        # Simple tokenization by splitting on spaces
         words = text.lower().split()
-        tokens = [self.word_to_id[word] for word in words]
+        current_id = len(self.word_to_id)
         
-        # Update id_to_word mapping
+        tokens = []
         for word in words:
-            idx = self.word_to_id[word]
-            self.id_to_word[idx] = word
+            # If word not in dictionary, add it
+            if word not in self.word_to_id:
+                self.word_to_id[word] = current_id
+                self.id_to_word[current_id] = word
+                current_id += 1
+            
+            tokens.append(self.word_to_id[word])
             
         return tokens
     
     def decode(self, token_ids):
-        return [self.id_to_word[id] for id in token_ids]
+        return [self.id_to_word.get(id, "<UNK>") for id in token_ids]
 
     def vocab_size(self):
         return len(self.word_to_id)
+    
+    # Helper function to prepare batch
+    def prepare_batch(self, tokens, max_len=None):
+        if max_len is None:
+            max_len = max(len(seq) for seq in tokens)
+        
+        # Pad sequences to max length - We need padding because neural networks expect fixed-size inputs, 
+        # but sentences can have different lengths - here we are simply adding the <PAD> token at the end of sentences that
+        # are less than the largest
+        padded = [seq + [self.PAD_TOKEN] * (max_len - len(seq)) for seq in tokens]
+        # LLMs do use padding in some contexts (especially during training), they employ many sophisticated 
+        # techniques to minimize its impact on memory and computation efficiency!
+        return torch.LongTensor(padded)
 
-'''class SimpleAttention(nn.Module):
+class SimpleAttention(nn.Module):
     def __init__(self, input_size):
         super().__init__()
         self.query = nn.Linear(input_size, input_size)
         self.key = nn.Linear(input_size, input_size)
         self.value = nn.Linear(input_size, input_size)
-        
+
     def forward(self, x):
         Q = self.query(x)
         K = self.key(x)
@@ -53,7 +78,7 @@ class SimpleTokenizer:
         
         return output, attention_weights
 
-class TextAttentionModel(nn.Module):
+class Model(nn.Module):
     def __init__(self, vocab_size, embedding_dim):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -65,15 +90,7 @@ class TextAttentionModel(nn.Module):
         output, weights = self.attention(embedded)
         return output, weights
 
-# Helper function to prepare batch
-def prepare_batch(tokens, max_len=None):
-    if max_len is None:
-        max_len = max(len(seq) for seq in tokens)
-    
-    # Pad sequences to max length
-    padded = [seq + [tokenizer.PAD_TOKEN] * (max_len - len(seq)) for seq in tokens]
-    return torch.LongTensor(padded)
-'''
+
 # Example usage
 if __name__ == "__main__":
     # Initialize tokenizer
@@ -87,21 +104,22 @@ if __name__ == "__main__":
     ]
     
     # Tokenize sentences
-    tokenized = [tokenizer.tokenize(sent) for sent in sentences]
+    tokenized = [tokenizer.tokenize(sentence) for sentence in sentences]
+
     print("\nTokenized sequences:")
     for sent, tokens in zip(sentences, tokenized):
         print(f"Original: {sent}")
         print(f"Tokens: {tokens}")
         print(f"Decoded: {' '.join(tokenizer.decode(tokens))}\n")
     
-    '''# Prepare batch
-    batch = prepare_batch(tokenized)
+    # Prepare batch
+    batch = tokenizer.prepare_batch(tokenized)
     print("Batch shape:", batch.shape)
     
     # Initialize model
     vocab_size = tokenizer.vocab_size()
     embedding_dim = 32
-    model = TextAttentionModel(vocab_size, embedding_dim)
+    model = Model(vocab_size, embedding_dim)
     
     # Forward pass
     output, attention_weights = model(batch)
@@ -111,7 +129,7 @@ if __name__ == "__main__":
     
     # Print attention weights for first sentence
     print("\nAttention weights for first sentence:")
-    print(attention_weights[0].round(decimals=2))'''
+    print(attention_weights[0].round(decimals=2))
     
     # Visualize attention (optional, requires matplotlib)
     '''try:
