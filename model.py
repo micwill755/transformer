@@ -38,49 +38,38 @@ class SimpleTokenizer:
 
 class TextEmbedding:  
     def __init__(self, vocab_size, embedding_dim):
-        # Just create the embedding weight matrix
+        ''' Creates a matrix of random numbers
+        vocab_size rows (one for each word in vocabulary)
+        embedding_dim columns (features for each word)''' 
+
         self.weight = torch.randn(vocab_size, embedding_dim)
-        print("Embedding matrix shape:", self.weight.shape)  # (10, 8)
+
+        '''
+        In this case:
+        vocab_size = 10 (number of unique words in your vocabulary - all unique words in sentences + <PAD> & <UNK>)
+        embedding_dim = 8 (each word gets 8 random numbers)
+
+        So self.weight looks like:
+        [
+            [-0.6351, 0.1994, 0.7733, -0.3779, -1.1220, 1.3301, 0.4687, -0.1523], # word_id 0 (<PAD>)
+            [-1.1897, -0.9326, -0.8552, 0.7444, 0.4291, -1.5263, 0.8666, -1.1037], # word_id 1 (<UNK>)
+            [-1.0172, -0.2445, -1.0905, 0.3260, -0.3313, -1.3757, 0.2354, -0.0960], # word_id 2 ("hello")
+            ...  # and so on for each word
+        ]
+        
+        The key points:
+
+        Weight matrix is initialized once
+        Same weights are used for all forward passes
+        In training, these weights would be updated through backpropagation
+        But in our example, they stay fixed as random values
+        '''
+
+        print("Embedding matrix shape:", self.weight.shape) 
     
     def forward(self, x):
-        '''
-
-        here is how the indexing to the embedding table looks:
-
-        # Your weight matrix (10 rows, 8 columns):
-        weight = tensor([
-            # row 0: embedding for <PAD> (index 0)
-            [-0.6351,  0.1994,  0.7733, -0.3779, -1.1220,  1.3301,  0.4687, -0.1523],
-            # row 1: embedding for <UNK> (index 1)
-            [-1.1897, -0.9326, -0.8552,  0.7444,  0.4291, -1.5263,  0.8666, -1.1037],
-            # row 2: embedding for first word (index 2)
-            [-1.0172, -0.2445, -1.0905,  0.3260, -0.3313, -1.3757,  0.2354, -0.0960],
-            # ... and so on
-        ])
-
-        # Your input x (3 sequences, 4 tokens each):
-        x = tensor([
-            [2, 3, 0, 0],  # first sequence of 4 words, remember 0 is the padding <PAD> (index 0) x
-            [4, 5, 6, 7],  # second sequence
-            [8, 5, 9, 0]   # third sequence
-        ])
-
-        # When you do self.weight[x], it looks up each index in x
-        # and gets the corresponding row from weight:
-
-        # For first sequence [2, 3, 0, 0]:
-        # - index 2 -> gets row 2 of weight matrix
-        # - index 3 -> gets row 3 of weight matrix
-        # - index 0 -> gets row 0 of weight matrix
-        # - index 0 -> gets row 0 of weight matrix
-
-        # For second sequence [4, 5, 6, 7]:
-        # - index 4 -> gets row 4 of weight matrix
-        # - index 5 -> gets row 5 of weight matrix
-        # - index 6 -> gets row 6 of weight matrix
-        # - index 7 -> gets row 7 of weight matrix
-        '''
-
+        # x contains word IDs, like [2, 3, 0, 0] for "hello world <PAD> <PAD>"
+        # self.weight[x] looks up the corresponding rows from the weight matrix
         return self.weight[x]
     
 # -------------- 2. TextEmbedding
@@ -88,88 +77,50 @@ class TextEmbedding:
 # -------------- 3. Attention
 
 class SimpleAttention():
+    '''
+    Each instance of SimpleAttention has its own Q, K, V matrices that are:
+
+    Initialized once when the model is created
+    Used repeatedly in forward passes and updated during training 
+    Each instance can learn to focus on different aspects of the input
+
+    In an real world example a model will have n number of attention heads, and each can learn to focus on different types of semantics, relationships 
+    or patterns in the data through training 
+
+    '''
     def __init__(self, embedding_dim):
-        '''
-        # Let's say we have the word "bank"
-        bank_embedding = [0.5, -0.2, 0.7]  # original embedding
-
-        # Without linear transformations:
-        # "bank" only has one representation
-
-        # But "bank" could mean:
-        # - financial institution
-        # - river bank
-        # - to tilt/turn
-
-        # With transformations:
-        Q = query(bank_embedding)   # might learn to focus on context
-        K = key(bank_embedding)     # might learn to provide context
-        V = value(bank_embedding)   # might learn to provide meaning
-
-        1) so q*k creates a new matrix of dot products which words should pay attention to other words, and this produces a weight, 
-        2) that weight is then mulitplied by the v vector to produce a new embedding for that word?
-
-        # For "hello world":
-        scores = Q * K  
-        We're doing matrix multiplication
-        But each element in the resulting matrix is a dot product between word vectors
-        That's why we need to transpose K (to align the vectors for dot products)
-        # Shows how much each word should attend to others
-        [
-            [0.8, 0.3],  # hello->hello (0.8), hello->world (0.3)
-            [0.4, 0.7]   # world->hello (0.4), world->world (0.7)
-        ]
-
-        # In attention:
-        Q = [[q11, q12],    # 2x2 matrix (2 words, 2 features)
-            [q21, q22]]
-
-        K = [[k11, k12],    # 2x2 matrix
-            [k21, k22]]
-
-        # Q × K.transpose gives us dot products between rows of Q and rows of K
-        scores = Q × K.transpose = [[q1·k1, q1·k2],
-                                    [q2·k1, q2·k2]]
-
-        Softmax converts to weights:
-        weights = softmax(scores)
-        [
-            [0.7, 0.3],  # hello pays 70% attention to hello, 30% to world
-            [0.4, 0.6]   # world pays 40% attention to hello, 60% to world
-        ]
-
-        Multiply by V to get new embeddings:
-        # V contains transformed value vectors for each word
-        new_embeddings = weights * V
-
-        # For "hello":
-        # new_hello = (0.7 * V_hello) + (0.3 * V_world)
-        # Combines information from both words based on attention weights
-
-        # For "world":
-        # new_world = (0.4 * V_hello) + (0.6 * V_world)
-
-        So each word gets a new embedding that's a weighted mixture of all the value vectors, where the weights come from how much attention it should pay to each word!
-
-        '''
         self.query = nn.Linear(embedding_dim, embedding_dim)
         self.key = nn.Linear(embedding_dim, embedding_dim)
         self.value = nn.Linear(embedding_dim, embedding_dim)
+        '''
+        nn.Linear(embedding_dim, embedding_dim) creates:
+            1. A weight matrix of shape (embedding_dim, embedding_dim)
+            2. A bias vector of shape (embedding_dim)
+
+        In this example model:
+        Each of these creates:
+            - Weight matrix shape: (8, 8)
+            - Bias vector shape: (8)
+        self.query = nn.Linear(8, 8)  # Weight_Q(8,8) and bias_Q(8)
+        self.key = nn.Linear(8, 8)    # Weight_K(8,8) and bias_K(8)
+        self.value = nn.Linear(8, 8)  # Weight_V(8,8) and bias_V(8)
+        '''
     
     def forward(self, x):
         '''
-        This (b,t,c) format is important because:
+        When we do self.query(x), it performs:
+        Q = x * Weight_Q + bias_Q
 
-        b: allows processing multiple sequences at once - in this example we are using
-        t: represents the sequence of words
-        c: represents the features/embedding for each word
+        example:
+
+        Input x (one word embedding):
+        x = [-1.0172, -0.2445, -1.0905, 0.3260, -0.3313, -1.3757, 0.2354, -0.0960]
+
+        Query transformation:
+        1. x * Weight_Q (8x8 matrix)
+        2. Add bias_Q (8 values)
+        Results in new 8-dimensional vector
         '''
-        # x shape: (batch_size, sequence_length, embedding_dim) - 3D tensor or a rank-3 tensor.
-
-        # 1. Each word creates: 
-        # Query: "what we're looking for" - A query to search for relevant context
-        # Key: "what we have": A key to be searched by other words
-        # Value: "what we'll return" A value that gets passed to other words based on relevance
         Q = self.query(x)  # Query: "what we're looking for"
         K = self.key(x)    # Key: "what we have"
         V = self.value(x)  # Value: "what we'll return"
