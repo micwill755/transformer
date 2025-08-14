@@ -59,9 +59,6 @@ class TextEmbedding:
         plt.title("Word Embeddings Visualization")
         plt.show()
 
-    def forward(self, x):  
-        return self.weight[x]
-
 if __name__ == "__main__":
     # Create model with 2D embeddings for visualization
 
